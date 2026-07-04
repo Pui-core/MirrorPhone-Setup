@@ -87,6 +87,34 @@ function Get-SourceZipUrl {
     return "https://github.com/$Repo/archive/refs/heads/$Ref.zip"
 }
 
+function Clear-InstallSourceFiles {
+    param([string]$Path)
+
+    $sourceDirectories = @("ios", "scripts", "src", "test")
+    $sourceFiles = @(
+        ".gitignore",
+        "README.md",
+        "package.json",
+        "package-lock.json",
+        "start-mirrorPhone.bat",
+        "start-mirrorPhone.ps1"
+    )
+
+    foreach ($directory in $sourceDirectories) {
+        $target = Join-Path $Path $directory
+        if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Recurse -Force
+        }
+    }
+
+    foreach ($file in $sourceFiles) {
+        $target = Join-Path $Path $file
+        if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Force
+        }
+    }
+}
+
 if (-not [Environment]::Is64BitOperatingSystem) {
     Stop-WithMessage "mirrorPhone requires 64-bit Windows."
 }
@@ -104,8 +132,9 @@ $zipPath = Join-Path $tempRoot "mirrorPhone.zip"
 Write-Step "Source: $SourceRepo@$SourceRef"
 Write-Step "Install root: $InstallRoot"
 
-if ((Test-Path -LiteralPath $InstallRoot) -and -not (Test-Path -LiteralPath $markerPath)) {
-    Stop-WithMessage "Install root already exists and was not created by MirrorPhone-Setup: $InstallRoot"
+$installMode = "install"
+if (Test-Path -LiteralPath $InstallRoot) {
+    $installMode = if (Test-Path -LiteralPath $markerPath) { "update" } else { "adopt-update" }
 }
 
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
@@ -139,8 +168,12 @@ try {
     }
 
     if (Test-Path -LiteralPath $InstallRoot) {
-        Write-Step "Removing previous MirrorPhone install..."
-        Remove-Item -LiteralPath $InstallRoot -Recurse -Force
+        if (Test-Path -LiteralPath $markerPath) {
+            Write-Step "Updating previous MirrorPhone install..."
+        } else {
+            Write-Step "Existing MirrorPhone folder found. Adopting it as an update target..."
+        }
+        Clear-InstallSourceFiles -Path $InstallRoot
     }
 
     Write-Step "Copying files..."
@@ -151,6 +184,7 @@ try {
         "repo=$SourceRepo"
         "ref=$SourceRef"
         "source=$sourceMode"
+        "mode=$installMode"
         "installedAt=$(Get-Date -Format o)"
     )
 
