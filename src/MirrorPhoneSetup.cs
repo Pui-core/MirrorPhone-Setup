@@ -12,7 +12,7 @@ namespace MirrorPhoneSetup
         private const string SourceRepo = "Pui-core/mirrorPhone";
         private const string SourceRef = "main";
         private const string SourceResourceName = "MirrorPhoneSource.zip";
-        private const string Version = "0.2.4-electron-prepare";
+        private const string Version = "0.2.5-start-button-ui";
 
         private static int Main(string[] args)
         {

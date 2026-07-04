@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.2.4-electron-prepare",
+    [string]$Version = "0.2.5-start-button-ui",
     [string]$SourceZip = ""
 )
 
