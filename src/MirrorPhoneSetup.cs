@@ -12,7 +12,7 @@ namespace MirrorPhoneSetup
         private const string SourceRepo = "Pui-core/mirrorPhone";
         private const string SourceRef = "main";
         private const string SourceResourceName = "MirrorPhoneSource.zip";
-        private const string Version = "0.2.3-update-install";
+        private const string Version = "0.2.4-electron-prepare";
 
         private static int Main(string[] args)
         {
@@ -94,6 +94,7 @@ namespace MirrorPhoneSetup
                 WriteStep("Installing npm dependencies...");
                 Run("cmd.exe", "/c npm install", installRoot, GetPathWithNode());
 
+                EnsureElectronBinary(installRoot);
                 EnsureAirPlayEngine(installRoot);
 
                 var launcher = Path.Combine(installRoot, "start-mirrorPhone.bat");
@@ -124,6 +125,7 @@ namespace MirrorPhoneSetup
         private static void PrepareInstallRootForUpdate(string installRoot)
         {
             var sourceDirectories = new[] { "ios", "scripts", "src", "test" };
+            var refreshDirectories = new[] { Path.Combine("node_modules", "electron") };
             var sourceFiles = new[]
             {
                 ".gitignore",
@@ -133,12 +135,28 @@ namespace MirrorPhoneSetup
                 "start-mirrorPhone.bat",
                 "start-mirrorPhone.ps1"
             };
+            var refreshFiles = new[]
+            {
+                Path.Combine("node_modules", ".bin", "electron"),
+                Path.Combine("node_modules", ".bin", "electron.cmd"),
+                Path.Combine("node_modules", ".bin", "electron.ps1")
+            };
 
             foreach (var directory in sourceDirectories)
             {
                 var path = Path.Combine(installRoot, directory);
                 if (Directory.Exists(path))
                 {
+                    Directory.Delete(path, true);
+                }
+            }
+
+            foreach (var directory in refreshDirectories)
+            {
+                var path = Path.Combine(installRoot, directory);
+                if (Directory.Exists(path))
+                {
+                    WriteStep("Refreshing " + directory + "...");
                     Directory.Delete(path, true);
                 }
             }
@@ -151,6 +169,55 @@ namespace MirrorPhoneSetup
                     File.Delete(path);
                 }
             }
+
+            foreach (var file in refreshFiles)
+            {
+                var path = Path.Combine(installRoot, file);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+
+        private static void EnsureElectronBinary(string installRoot)
+        {
+            var electronDir = Path.Combine(installRoot, "node_modules", "electron");
+            var electronExe = Path.Combine(electronDir, "dist", "electron.exe");
+            var installScript = Path.Combine(electronDir, "install.js");
+            var pathFile = Path.Combine(electronDir, "path.txt");
+
+            if (File.Exists(electronExe))
+            {
+                WriteStep("Windows Electron binary ready.");
+                return;
+            }
+
+            if (!File.Exists(installScript))
+            {
+                throw new FileNotFoundException("Electron install script was not found after npm install.", installScript);
+            }
+
+            WriteStep("Preparing Windows Electron binary...");
+            TryDeleteDirectory(Path.Combine(electronDir, "dist"));
+            if (File.Exists(pathFile))
+            {
+                File.Delete(pathFile);
+            }
+
+            Run(
+                "cmd.exe",
+                "/c set \"ELECTRON_INSTALL_PLATFORM=win32\" && set \"ELECTRON_INSTALL_ARCH=x64\" && node \"node_modules\\electron\\install.js\"",
+                installRoot,
+                GetPathWithNode()
+            );
+
+            if (!File.Exists(electronExe))
+            {
+                throw new FileNotFoundException("Windows Electron binary was not found after setup.", electronExe);
+            }
+
+            WriteStep("Windows Electron binary ready.");
         }
 
         private static void EnsureAirPlayEngine(string installRoot)

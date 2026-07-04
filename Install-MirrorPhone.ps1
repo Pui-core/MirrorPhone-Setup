@@ -91,6 +91,7 @@ function Clear-InstallSourceFiles {
     param([string]$Path)
 
     $sourceDirectories = @("ios", "scripts", "src", "test")
+    $refreshDirectories = @("node_modules\electron")
     $sourceFiles = @(
         ".gitignore",
         "README.md",
@@ -99,10 +100,23 @@ function Clear-InstallSourceFiles {
         "start-mirrorPhone.bat",
         "start-mirrorPhone.ps1"
     )
+    $refreshFiles = @(
+        "node_modules\.bin\electron",
+        "node_modules\.bin\electron.cmd",
+        "node_modules\.bin\electron.ps1"
+    )
 
     foreach ($directory in $sourceDirectories) {
         $target = Join-Path $Path $directory
         if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Recurse -Force
+        }
+    }
+
+    foreach ($directory in $refreshDirectories) {
+        $target = Join-Path $Path $directory
+        if (Test-Path -LiteralPath $target) {
+            Write-Step "Refreshing $directory..."
             Remove-Item -LiteralPath $target -Recurse -Force
         }
     }
@@ -113,6 +127,61 @@ function Clear-InstallSourceFiles {
             Remove-Item -LiteralPath $target -Force
         }
     }
+
+    foreach ($file in $refreshFiles) {
+        $target = Join-Path $Path $file
+        if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Force
+        }
+    }
+}
+
+function Ensure-ElectronBinary {
+    param([string]$Path)
+
+    $electronDir = Join-Path $Path "node_modules\electron"
+    $electronExe = Join-Path $electronDir "dist\electron.exe"
+    $installScript = Join-Path $electronDir "install.js"
+    $pathFile = Join-Path $electronDir "path.txt"
+
+    if (Test-Path -LiteralPath $electronExe) {
+        Write-Step "Windows Electron binary ready."
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $installScript)) {
+        Stop-WithMessage "Electron install script was not found after npm install: $installScript"
+    }
+
+    Write-Step "Preparing Windows Electron binary..."
+
+    $electronDist = Join-Path $electronDir "dist"
+    if (Test-Path -LiteralPath $electronDist) {
+        Remove-Item -LiteralPath $electronDist -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $pathFile) {
+        Remove-Item -LiteralPath $pathFile -Force
+    }
+
+    $previousPlatform = $env:ELECTRON_INSTALL_PLATFORM
+    $previousArch = $env:ELECTRON_INSTALL_ARCH
+    try {
+        $env:ELECTRON_INSTALL_PLATFORM = "win32"
+        $env:ELECTRON_INSTALL_ARCH = "x64"
+        & node $installScript
+        if ($LASTEXITCODE -ne 0) {
+            Stop-WithMessage "Electron Windows binary setup failed with exit code $LASTEXITCODE."
+        }
+    } finally {
+        $env:ELECTRON_INSTALL_PLATFORM = $previousPlatform
+        $env:ELECTRON_INSTALL_ARCH = $previousArch
+    }
+
+    if (-not (Test-Path -LiteralPath $electronExe)) {
+        Stop-WithMessage "Windows Electron binary was not found after setup: $electronExe"
+    }
+
+    Write-Step "Windows Electron binary ready."
 }
 
 if (-not [Environment]::Is64BitOperatingSystem) {
@@ -195,6 +264,8 @@ try {
         if ($LASTEXITCODE -ne 0) {
             Stop-WithMessage "npm install failed with exit code $LASTEXITCODE."
         }
+
+        Ensure-ElectronBinary -Path $InstallRoot
 
         $packageJsonPath = Join-Path $InstallRoot "package.json"
         if ((Test-Path -LiteralPath $packageJsonPath) -and ((Get-Content -Raw -LiteralPath $packageJsonPath) -match '"setup:airplay"')) {
