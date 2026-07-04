@@ -20,10 +20,42 @@ function Stop-WithMessage {
     exit 1
 }
 
-function Require-Command {
+function Find-Command {
     param([string]$Name)
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-        Stop-WithMessage "$Name was not found. Install Node.js LTS, then run this installer again."
+    return Get-Command $Name -ErrorAction SilentlyContinue
+}
+
+function Ensure-Node {
+    if ((Find-Command "node") -and (Find-Command "npm")) {
+        Write-Step "Node.js/npm found."
+        return
+    }
+
+    Write-Step "Node.js/npm not found. Installing Node.js LTS with winget..."
+
+    if (-not (Find-Command "winget")) {
+        Stop-WithMessage "Node.js LTS is required, and winget was not found. Install Node.js LTS from https://nodejs.org/ and run this installer again."
+    }
+
+    winget install --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+        Stop-WithMessage "winget failed to install Node.js LTS. Exit code: $LASTEXITCODE"
+    }
+
+    $nodeDirCandidates = @(
+        "$env:ProgramFiles\nodejs",
+        "$env:LOCALAPPDATA\Programs\nodejs"
+    )
+
+    foreach ($nodeDir in $nodeDirCandidates) {
+        if (Test-Path -LiteralPath (Join-Path $nodeDir "npm.cmd")) {
+            $env:PATH = "$nodeDir;$env:PATH"
+            break
+        }
+    }
+
+    if (-not ((Find-Command "node") -and (Find-Command "npm"))) {
+        Stop-WithMessage "Node.js install finished, but node/npm were not found. Restart Windows and run this installer again."
     }
 }
 
@@ -49,8 +81,7 @@ if (-not [Environment]::Is64BitOperatingSystem) {
     Stop-WithMessage "mirrorPhone requires 64-bit Windows."
 }
 
-Require-Command "node"
-Require-Command "npm"
+Ensure-Node
 
 $sourceZipUrl = "https://github.com/$SourceRepo/archive/refs/heads/$SourceRef.zip"
 $markerPath = Join-Path $InstallRoot ".mirrorphone-install"
