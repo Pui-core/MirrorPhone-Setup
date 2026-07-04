@@ -12,7 +12,7 @@ namespace MirrorPhoneSetup
         private const string SourceRepo = "Pui-core/mirrorPhone";
         private const string SourceRef = "main";
         private const string SourceResourceName = "MirrorPhoneSource.zip";
-        private const string Version = "0.2.1-embedded-source";
+        private const string Version = "0.2.2-airplay-embedded";
 
         private static int Main(string[] args)
         {
@@ -96,6 +96,8 @@ namespace MirrorPhoneSetup
                 WriteStep("Installing npm dependencies...");
                 Run("cmd.exe", "/c npm install", installRoot, GetPathWithNode());
 
+                EnsureAirPlayEngine(installRoot);
+
                 var launcher = Path.Combine(installRoot, "start-mirrorPhone.bat");
                 if (!File.Exists(launcher))
                 {
@@ -109,6 +111,24 @@ namespace MirrorPhoneSetup
             {
                 TryDeleteDirectory(tempRoot);
             }
+        }
+
+        private static void EnsureAirPlayEngine(string installRoot)
+        {
+            var packageJson = Path.Combine(installRoot, "package.json");
+            if (!File.Exists(packageJson))
+            {
+                return;
+            }
+
+            var packageJsonText = File.ReadAllText(packageJson);
+            if (packageJsonText.IndexOf("\"setup:airplay\"", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return;
+            }
+
+            WriteStep("Installing AirPlay receiver engine...");
+            Run("cmd.exe", "/c npm run setup:airplay", installRoot, GetPathWithNode());
         }
 
         private static void WriteEmbeddedSourceZip(string zipPath)

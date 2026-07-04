@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.2.1-embedded-source",
+    [string]$Version = "0.2.2-airplay-embedded",
     [string]$SourceZip = ""
 )
 
