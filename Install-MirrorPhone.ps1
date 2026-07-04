@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$SourceRepo = "Pui-core/mirrorPhone",
-    [string]$SourceRef = "feature/issue-6-airplay-receiver",
+    [string]$SourceRef = "main",
+    [string]$SourceZipPath = "",
     [string]$InstallRoot = "$env:LOCALAPPDATA\Programs\MirrorPhone",
     [switch]$NoShortcut
 )
@@ -77,18 +78,30 @@ function New-Shortcut {
     $shortcut.Save()
 }
 
+function Get-SourceZipUrl {
+    param(
+        [string]$Repo,
+        [string]$Ref
+    )
+
+    return "https://github.com/$Repo/archive/refs/heads/$Ref.zip"
+}
+
 if (-not [Environment]::Is64BitOperatingSystem) {
     Stop-WithMessage "mirrorPhone requires 64-bit Windows."
 }
 
 Ensure-Node
 
-$sourceZipUrl = "https://github.com/$SourceRepo/archive/refs/heads/$SourceRef.zip"
+if ([string]::IsNullOrWhiteSpace($SourceZipPath)) {
+    $SourceZipPath = Join-Path $PSScriptRoot "mirrorPhone-source.zip"
+}
+
 $markerPath = Join-Path $InstallRoot ".mirrorphone-install"
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("MirrorPhone-Setup-" + [Guid]::NewGuid().ToString("N"))
 $zipPath = Join-Path $tempRoot "mirrorPhone.zip"
 
-Write-Step "Source: $sourceZipUrl"
+Write-Step "Source: $SourceRepo@$SourceRef"
 Write-Step "Install root: $InstallRoot"
 
 if ((Test-Path -LiteralPath $InstallRoot) -and -not (Test-Path -LiteralPath $markerPath)) {
@@ -98,14 +111,27 @@ if ((Test-Path -LiteralPath $InstallRoot) -and -not (Test-Path -LiteralPath $mar
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 
 try {
-    Write-Step "Downloading mirrorPhone source..."
-    Invoke-WebRequest -UseBasicParsing -Uri $sourceZipUrl -OutFile $zipPath
+    if (Test-Path -LiteralPath $SourceZipPath) {
+        Write-Step "Using bundled mirrorPhone source: $SourceZipPath"
+        Copy-Item -LiteralPath $SourceZipPath -Destination $zipPath -Force
+        $sourceMode = "bundled-zip"
+    } else {
+        $sourceZipUrl = Get-SourceZipUrl -Repo $SourceRepo -Ref $SourceRef
+        Write-Step "Bundled source was not found. Downloading mirrorPhone source..."
+        Write-Step "Source URL: $sourceZipUrl"
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri $sourceZipUrl -OutFile $zipPath
+            $sourceMode = "github-archive"
+        } catch {
+            Stop-WithMessage "Could not download mirrorPhone source. For the default private repository, keep mirrorPhone-source.zip next to this script or use the EXE installer. Details: $($_.Exception.Message)"
+        }
+    }
 
     Write-Step "Extracting source..."
     Expand-Archive -LiteralPath $zipPath -DestinationPath $tempRoot -Force
 
     $sourceDir = Get-ChildItem -LiteralPath $tempRoot -Directory |
-        Where-Object { $_.Name -like "mirrorPhone-*" -or $_.Name -like "mirrorphone-*" } |
+        Where-Object { $_.Name -ne "__MACOSX" } |
         Select-Object -First 1
 
     if (-not $sourceDir) {
@@ -124,6 +150,7 @@ try {
     Set-Content -LiteralPath $markerPath -Value @(
         "repo=$SourceRepo"
         "ref=$SourceRef"
+        "source=$sourceMode"
         "installedAt=$(Get-Date -Format o)"
     )
 
