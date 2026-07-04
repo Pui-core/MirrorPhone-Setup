@@ -161,6 +161,15 @@ try {
         if ($LASTEXITCODE -ne 0) {
             Stop-WithMessage "npm install failed with exit code $LASTEXITCODE."
         }
+
+        $packageJsonPath = Join-Path $InstallRoot "package.json"
+        if ((Test-Path -LiteralPath $packageJsonPath) -and ((Get-Content -Raw -LiteralPath $packageJsonPath) -match '"setup:airplay"')) {
+            Write-Step "Installing AirPlay receiver engine..."
+            & npm run setup:airplay
+            if ($LASTEXITCODE -ne 0) {
+                Stop-WithMessage "npm run setup:airplay failed with exit code $LASTEXITCODE."
+            }
+        }
     } finally {
         Pop-Location
     }
