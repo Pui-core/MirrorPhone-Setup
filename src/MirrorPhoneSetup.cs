@@ -12,7 +12,7 @@ namespace MirrorPhoneSetup
         private const string SourceRepo = "Pui-core/mirrorPhone";
         private const string SourceRef = "main";
         private const string SourceResourceName = "MirrorPhoneSource.zip";
-        private const string Version = "0.2.2-airplay-embedded";
+        private const string Version = "0.2.3-update-install";
 
         private static int Main(string[] args)
         {
@@ -55,12 +55,7 @@ namespace MirrorPhoneSetup
             WriteStep("Install root: " + installRoot);
             EnsureNodeAndNpm();
 
-            if (Directory.Exists(installRoot) && !File.Exists(markerPath))
-            {
-                throw new InvalidOperationException(
-                    "Install root already exists and was not created by MirrorPhone-Setup: " + installRoot
-                );
-            }
+            var installMode = GetInstallMode(installRoot, markerPath);
 
             Directory.CreateDirectory(tempRoot);
 
@@ -76,8 +71,10 @@ namespace MirrorPhoneSetup
 
                 if (Directory.Exists(installRoot))
                 {
-                    WriteStep("Removing previous MirrorPhone install...");
-                    Directory.Delete(installRoot, true);
+                    WriteStep(File.Exists(markerPath)
+                        ? "Updating previous MirrorPhone install..."
+                        : "Existing MirrorPhone folder found. Adopting it as an update target...");
+                    PrepareInstallRootForUpdate(installRoot);
                 }
 
                 WriteStep("Copying files...");
@@ -89,6 +86,7 @@ namespace MirrorPhoneSetup
                     "repo=" + SourceRepo,
                     "ref=" + SourceRef,
                     "source=embedded",
+                    "mode=" + installMode,
                     "installer=" + Version,
                     "installedAt=" + DateTimeOffset.Now.ToString("o")
                 });
@@ -110,6 +108,48 @@ namespace MirrorPhoneSetup
             finally
             {
                 TryDeleteDirectory(tempRoot);
+            }
+        }
+
+        private static string GetInstallMode(string installRoot, string markerPath)
+        {
+            if (!Directory.Exists(installRoot))
+            {
+                return "install";
+            }
+
+            return File.Exists(markerPath) ? "update" : "adopt-update";
+        }
+
+        private static void PrepareInstallRootForUpdate(string installRoot)
+        {
+            var sourceDirectories = new[] { "ios", "scripts", "src", "test" };
+            var sourceFiles = new[]
+            {
+                ".gitignore",
+                "README.md",
+                "package.json",
+                "package-lock.json",
+                "start-mirrorPhone.bat",
+                "start-mirrorPhone.ps1"
+            };
+
+            foreach (var directory in sourceDirectories)
+            {
+                var path = Path.Combine(installRoot, directory);
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, true);
+                }
+            }
+
+            foreach (var file in sourceFiles)
+            {
+                var path = Path.Combine(installRoot, file);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
             }
         }
 
