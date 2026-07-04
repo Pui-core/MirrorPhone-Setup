@@ -10,8 +10,9 @@ namespace MirrorPhoneSetup
     internal static class Program
     {
         private const string SourceRepo = "Pui-core/mirrorPhone";
-        private const string SourceRef = "feature/issue-6-airplay-receiver";
-        private const string Version = "0.2.0-exe-bootstrapper";
+        private const string SourceRef = "main";
+        private const string SourceResourceName = "MirrorPhoneSource.zip";
+        private const string Version = "0.2.1-embedded-source";
 
         private static int Main(string[] args)
         {
@@ -47,10 +48,10 @@ namespace MirrorPhoneSetup
                 "MirrorPhone"
             );
             var markerPath = Path.Combine(installRoot, ".mirrorphone-install");
-            var sourceZipUrl = "https://github.com/" + SourceRepo + "/archive/refs/heads/" + SourceRef + ".zip";
             var tempRoot = Path.Combine(Path.GetTempPath(), "MirrorPhone-Setup-" + Guid.NewGuid().ToString("N"));
             var zipPath = Path.Combine(tempRoot, "mirrorPhone.zip");
 
+            WriteStep("Source: embedded " + SourceRepo + "@" + SourceRef);
             WriteStep("Install root: " + installRoot);
             EnsureNodeAndNpm();
 
@@ -65,11 +66,8 @@ namespace MirrorPhoneSetup
 
             try
             {
-                WriteStep("Downloading mirrorPhone source...");
-                using (var client = new WebClient())
-                {
-                    client.DownloadFile(sourceZipUrl, zipPath);
-                }
+                WriteStep("Writing embedded mirrorPhone source...");
+                WriteEmbeddedSourceZip(zipPath);
 
                 WriteStep("Extracting source...");
                 ZipFile.ExtractToDirectory(zipPath, tempRoot);
@@ -90,6 +88,7 @@ namespace MirrorPhoneSetup
                 {
                     "repo=" + SourceRepo,
                     "ref=" + SourceRef,
+                    "source=embedded",
                     "installer=" + Version,
                     "installedAt=" + DateTimeOffset.Now.ToString("o")
                 });
@@ -109,6 +108,22 @@ namespace MirrorPhoneSetup
             finally
             {
                 TryDeleteDirectory(tempRoot);
+            }
+        }
+
+        private static void WriteEmbeddedSourceZip(string zipPath)
+        {
+            using (var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream(SourceResourceName))
+            {
+                if (resource == null)
+                {
+                    throw new InvalidOperationException("Embedded mirrorPhone source was not found: " + SourceResourceName);
+                }
+
+                using (var output = File.Create(zipPath))
+                {
+                    resource.CopyTo(output);
+                }
             }
         }
 
@@ -204,6 +219,12 @@ namespace MirrorPhoneSetup
 
         private static string FindExtractedSourceDirectory(string tempRoot)
         {
+            var directories = Directory.GetDirectories(tempRoot);
+            if (directories.Length == 1)
+            {
+                return directories[0];
+            }
+
             foreach (var directory in Directory.GetDirectories(tempRoot))
             {
                 var name = Path.GetFileName(directory);
